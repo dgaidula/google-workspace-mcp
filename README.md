@@ -1,4 +1,4 @@
-# gog-mcp-bridge
+# google-workspace-mcp
 
 > A minimal MCP stdio server that exposes the Google Workspace write operations
 > that [gog](https://gogcli.sh)'s own MCP server intentionally omits.
@@ -23,7 +23,7 @@ The gap: gog has a 700-command CLI surface covering every Google Workspace API, 
 Claude Desktop / Claude Code
         │  JSON-RPC 2.0 over stdio
         ▼
-  gog-mcp-bridge (this repo)
+  google-workspace-mcp (this repo)
         │  async spawn — args array, no shell
         ▼
   /opt/homebrew/bin/gog
@@ -87,8 +87,8 @@ gog --account you@example.com drive ls --max 5
 ## Installation
 
 ```bash
-git clone https://github.com/yourusername/gog-mcp-bridge.git
-cd gog-mcp-bridge
+git clone https://github.com/yourusername/google-workspace-mcp.git
+cd google-workspace-mcp
 chmod +x index.js
 ```
 
@@ -117,8 +117,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
         "--allow-tool", "all"
       ]
     },
-    "gog-mcp-bridge": {
-      "command": "/path/to/gog-mcp-bridge/index.js"
+    "google-workspace-mcp": {
+      "command": "/path/to/google-workspace-mcp/index.js"
     }
   }
 }
@@ -139,9 +139,9 @@ Add to `~/.claude.json` under `mcpServers`:
     "--allow-tool", "all"
   ]
 },
-"gog-mcp-bridge": {
+"google-workspace-mcp": {
   "type": "stdio",
-  "command": "/path/to/gog-mcp-bridge/index.js"
+  "command": "/path/to/google-workspace-mcp/index.js"
 }
 ```
 
@@ -162,7 +162,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 Expected output:
 ```json
-{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"gog-mcp-bridge","version":"1.0.0"}}}
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"google-workspace-mcp","version":"1.0.0"}}}
 ```
 
 ## A note on the design

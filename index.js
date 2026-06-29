@@ -530,7 +530,7 @@ async function handle(msg) {
     return send({ jsonrpc: '2.0', id, result: {
       protocolVersion: '2024-11-05',
       capabilities: { tools: {} },
-      serverInfo: { name: 'gog-mcp-bridge', version: '1.0.0' },
+      serverInfo: { name: 'google-workspace-mcp', version: '1.0.0' },
     }});
   }
 
