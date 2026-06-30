@@ -197,6 +197,18 @@ const TOOLS = [
   },
 
   {
+    name: 'drive_permissions',
+    description: 'List sharing permissions on a Drive file or folder — who has access and at what role (owner, editor, commenter, viewer).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_id: { type: 'string', description: 'Drive file or folder ID.' },
+      },
+      required: ['file_id'],
+    },
+  },
+
+  {
     name: 'drive_rename',
     description: 'Rename a Drive file or folder without moving it. Preserves file ID and all downstream references.',
     inputSchema: {
@@ -384,6 +396,12 @@ async function runTool(name, args) {
       if (description) cmd.push('--description', description);
       if (location)    cmd.push('--location', location);
       return gog(cmd);
+    }
+
+    case 'drive_permissions': {
+      const { file_id } = args;
+      if (!file_id) return gogErr('file_id is required.');
+      return gog(['drive', 'permissions', file_id]);
     }
 
     case 'drive_rename': {

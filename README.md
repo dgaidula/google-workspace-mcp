@@ -45,6 +45,7 @@ The server itself is raw JSON-RPC 2.0 over stdio, per the MCP spec. No SDK, no n
 | `drive_mv` | `gog drive move` | Move a file to a different folder |
 | `drive_trash` | `gog drive delete --force` | Move a file to trash (recoverable) |
 | `drive_rename` | `gog drive rename` | Rename a file/folder, preserving its ID |
+| `drive_permissions` | `gog drive permissions` | List who has access to a file and at what role |
 | `drive_list` | `gog drive ls` | List a folder with stable cursor pagination |
 | `drive_read` | `gog docs get` | Read a Google Doc's text content |
 | `drive_write` | `gog docs write` | Write/append to a Google Doc (Markdown, typography) |
@@ -57,7 +58,11 @@ The server itself is raw JSON-RPC 2.0 over stdio, per the MCP spec. No SDK, no n
 
 ### Why these tools
 
-**Drive triage.** `drive_mv` is the core operation in any Drive-based triage workflow — without it, an agent can find and read files but can't act on them. `drive_trash` is its cleanup complement, `drive_rename` adjusts names without breaking the file ID, and `drive_list` gives stable cursor-based pagination for walking a folder (no duplicates, clean page tokens — more reliable than search for triage).
+**Drive triage.** `drive_mv` is the core operation in any Drive-based triage workflow — without it, an agent can find and read files but can't act on them. `drive_trash` is its cleanup complement, `drive_rename` adjusts names without breaking the file ID, `drive_permissions` surfaces sharing visibility that gog's MCP doesn't expose, and `drive_list` gives stable cursor-based pagination for walking a folder (no duplicates, clean page tokens — more reliable than search for triage).
+
+### A known gap: no native "recent files"
+
+gog's `drive ls` doesn't expose an `orderBy`/sort flag, so there's no clean equivalent to "list my most recently modified files across Drive" — the kind of query the Google Drive connector's `list_recent_files` answers natively via the API's `orderBy=modifiedTime desc` parameter. A workaround exists (pull a larger page with `--all --max 100` and sort the JSON client-side) but it's a real compromise: more data pulled than needed, and sorting logic that belongs in the API now lives in application code. For a CLI built around automation, this is a surprising omission. If you need this, the built-in Google Drive connector remains the better tool for that specific query — see "What this bridge doesn't replace" below.
 
 **Google Docs.** `drive_read` returns a Doc's plain text; `drive_write` writes or appends content with optional Markdown conversion and typography. Content goes over stdin, so large documents and special characters are safe.
 
@@ -70,6 +75,15 @@ The server itself is raw JSON-RPC 2.0 over stdio, per the MCP spec. No SDK, no n
 `gmail_send` is gated behind an explicit two-step confirmation flow. The first call always returns a preflight preview — to, subject, body, threading context — without sending. Only a second call with `confirmed: true` actually sends. This prevents accidental sends from a single model decision and makes the intent visible to the user before anything leaves the outbox. If you want to disable email sending entirely, remove `gmail_send` from the tool registry.
 
 Drive permanent delete (`gog drive delete --permanent`) is omitted for the same reason — `drive_trash` is recoverable from Drive's trash; permanent deletion is not.
+
+### What this bridge doesn't replace
+
+Keep your platform's native Google Drive connector (or equivalent) connected alongside this bridge. Two things it does natively that this bridge deliberately doesn't replicate:
+
+- **Recent files, sorted by modification time.** See the gap noted above — gog's CLI has no `orderBy` flag for this.
+- **Permission editing.** This bridge exposes `drive_permissions` for *reading* sharing state, but changing access (adding/removing collaborators, transferring ownership) is a higher-stakes action better left to a dedicated, well-tested connector rather than a thin CLI shim.
+
+Running both side by side costs nothing — they don't conflict, and the model picks whichever tool fits the task.
 
 ## Prerequisites
 
