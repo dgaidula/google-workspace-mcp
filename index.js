@@ -263,12 +263,19 @@ const TOOLS = [
 
   {
     name: 'drive_file_read',
-    description: 'Download and return the text content of any Drive file (.md, .txt, etc.) by ID. Use drive_read for Google Docs. Returns plain text — no base64.',
+    description: [
+      'Download and return the content of any Drive file by ID.',
+      'Returns plain text by default. For binary files (docx, xlsx, pdf, pptx, images),',
+      'set encoding: "base64" to get a base64 string that preserves the bytes exactly —',
+      'reading binary content as plain text corrupts it.',
+      'Use drive_read for Google Docs instead.',
+    ].join(' '),
     inputSchema: {
       type: 'object',
       properties: {
-        file_id: { type: 'string', description: 'Drive file ID.' },
-        format:  { type: 'string', description: 'Export format for Google Workspace files: txt|md|pdf|docx|xlsx|pptx|csv. Inferred from file type if omitted.' },
+        file_id:  { type: 'string', description: 'Drive file ID.' },
+        format:   { type: 'string', description: 'Export format for Google Workspace files: txt|md|pdf|docx|xlsx|pptx|csv. Inferred from file type if omitted.' },
+        encoding: { type: 'string', description: '"utf8" (default) for text files, or "base64" for binary files (docx, xlsx, pdf, images).' },
       },
       required: ['file_id'],
     },
@@ -276,13 +283,19 @@ const TOOLS = [
 
   {
     name: 'drive_file_update',
-    description: 'Overwrite the content of an existing Drive file in-place. Preserves file ID, permissions, and shared links — critical for files referenced elsewhere in the workflow.',
+    description: [
+      'Overwrite the content of an existing Drive file in-place.',
+      'Preserves file ID, permissions, and shared links — critical for files referenced elsewhere in the workflow.',
+      'For binary files (docx, xlsx, pdf, images), set encoding: "base64" and pass base64-encoded content —',
+      'writing binary bytes as plain text corrupts the file.',
+    ].join(' '),
     inputSchema: {
       type: 'object',
       properties: {
         file_id:   { type: 'string', description: 'Drive file ID to update.' },
-        content:   { type: 'string', description: 'New file content.' },
-        mime_type: { type: 'string', description: 'MIME type override, e.g. "text/markdown". Inferred from filename if omitted.' },
+        content:   { type: 'string', description: 'New file content — plain text, or base64 if encoding is "base64".' },
+        encoding:  { type: 'string', description: '"utf8" (default) or "base64". Use "base64" for binary files.' },
+        mime_type: { type: 'string', description: 'MIME type override, e.g. "application/vnd.openxmlformats-officedocument.wordprocessingml.document" for .docx. Inferred from filename if omitted.' },
       },
       required: ['file_id', 'content'],
     },
@@ -290,13 +303,19 @@ const TOOLS = [
 
   {
     name: 'drive_file_create',
-    description: 'Create a new raw file (.md, .txt, etc.) directly in a Drive folder. Does NOT convert to Google Docs format. Eliminates the z_claude_trash_ root-then-copy workaround.',
+    description: [
+      'Create a new raw file in a Drive folder. Does NOT convert to Google Docs format.',
+      'Eliminates the z_claude_trash_ root-then-copy workaround.',
+      'For binary files (docx, xlsx, pdf, images), set encoding: "base64" and pass base64-encoded content —',
+      'writing binary bytes as plain text corrupts the file.',
+    ].join(' '),
     inputSchema: {
       type: 'object',
       properties: {
-        title:     { type: 'string',  description: 'Filename including extension, e.g. "jd-company-role.md".' },
-        content:   { type: 'string',  description: 'File content.' },
+        title:     { type: 'string',  description: 'Filename including extension, e.g. "jd-company-role.md" or "resume-director-v1.docx".' },
+        content:   { type: 'string',  description: 'File content — plain text, or base64 if encoding is "base64".' },
         parent_id: { type: 'string',  description: 'Drive folder ID to create the file in.' },
+        encoding:  { type: 'string',  description: '"utf8" (default) or "base64". Use "base64" for binary files.' },
         mime_type: { type: 'string',  description: 'MIME type override. Inferred from extension if omitted.' },
       },
       required: ['title', 'content', 'parent_id'],
@@ -441,7 +460,7 @@ async function runTool(name, args) {
     }
 
     case 'drive_file_read': {
-      const { file_id, format } = args;
+      const { file_id, format, encoding } = args;
       if (!file_id) return gogErr('file_id is required.');
       const ext = format ? `.${format}` : '.tmp';
       const tmp = makeTempFile(ext);
@@ -450,7 +469,11 @@ async function runTool(name, args) {
       const dlResult = await gog(cmd);
       if (!dlResult.ok) return dlResult;
       try {
-        const content = readFileSync(tmp, 'utf8');
+        // Binary files must be read as a raw Buffer and returned as base64 —
+        // reading with 'utf8' would corrupt any bytes that aren't valid UTF-8.
+        const content = encoding === 'base64'
+          ? readFileSync(tmp).toString('base64')
+          : readFileSync(tmp, 'utf8');
         try { unlinkSync(tmp); } catch (_) {}
         return { ok: true, stdout: content, stderr: '' };
       } catch (e) {
@@ -460,10 +483,16 @@ async function runTool(name, args) {
     }
 
     case 'drive_file_update': {
-      const { file_id, content, mime_type } = args;
+      const { file_id, content, encoding, mime_type } = args;
       if (!file_id || content === undefined) return gogErr('file_id and content are required.');
       const tmp = makeTempFile('.tmp');
-      writeFileSync(tmp, content, 'utf8');
+      // Binary content must be decoded to a raw Buffer and written without an
+      // encoding transform — writing with 'utf8' corrupts non-text bytes.
+      if (encoding === 'base64') {
+        writeFileSync(tmp, Buffer.from(content, 'base64'));
+      } else {
+        writeFileSync(tmp, content, 'utf8');
+      }
       const cmd = ['drive', 'upload', tmp, '--replace', file_id];
       if (mime_type) cmd.push('--mime-type', mime_type);
       const result = await gog(cmd);
@@ -472,13 +501,19 @@ async function runTool(name, args) {
     }
 
     case 'drive_file_create': {
-      const { title, content, parent_id, mime_type } = args;
+      const { title, content, parent_id, encoding, mime_type } = args;
       if (!title || content === undefined || !parent_id)
         return gogErr('title, content, and parent_id are required.');
       // Temp file gets the same extension as the target so gog infers MIME correctly.
       const ext = extname(title) || '.tmp';
       const tmp = makeTempFile(ext);
-      writeFileSync(tmp, content, 'utf8');
+      // Binary content must be decoded to a raw Buffer and written without an
+      // encoding transform — writing with 'utf8' corrupts non-text bytes.
+      if (encoding === 'base64') {
+        writeFileSync(tmp, Buffer.from(content, 'base64'));
+      } else {
+        writeFileSync(tmp, content, 'utf8');
+      }
       const cmd = ['drive', 'upload', tmp, '--name', title, '--parent', parent_id];
       if (mime_type) cmd.push('--mime-type', mime_type);
       // No --convert: preserve .md/.txt as raw files, not Google Docs.
