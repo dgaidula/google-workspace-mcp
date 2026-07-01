@@ -91,6 +91,14 @@ Running both side by side costs nothing — they don't conflict, and the model p
 - gog authenticated: `gog login` (or `gog auth add`)
 - Node.js (managed via `n` or any version manager)
 
+## Platform support
+
+This is a **desktop-only** tool. It runs as a local stdio MCP server — spawning the `gog` binary as a subprocess and reading/writing temp files on disk — so it only works in Claude Desktop and Claude Code, both of which support local MCP servers. Per Anthropic's own documentation, [desktop extensions and local MCP servers are not available in Claude's web or mobile clients](https://support.claude.com/en/articles/11725091-when-to-use-desktop-and-web-connectors), since there's no local process to spawn.
+
+If you need Drive/Calendar/Gmail actions from mobile, you have two options: hold write operations until you're back at a desktop session, or wire up a remote MCP connector (e.g., Composio) for the specific mobile use case — remote connectors run in the cloud rather than spawning a local process, so they work everywhere. Reads via your platform's built-in Google Drive connector, and Calendar/Meet via Composio, are unaffected by this limitation since those are remote connectors, not local servers.
+
+**The pattern used in this repo's own setup:** built-in Google Drive connector for reads and new-file creation on mobile (it already supports `create_file` + `copy_file`, enough to cover the old root-then-copy pattern), Composio for Calendar/Meet on any platform, and moves/renames/deletes on existing Drive files held until the next desktop session. This avoids adding a remote Drive connector at all — Composio's Drive tools route through a generic search-then-execute pattern (schema lookup, then execute), which adds per-call overhead even for a single mobile action, not just at bulk volume. If your mobile Drive-write needs are frequent enough to justify that overhead, wiring up Composio for Drive is a reasonable call — it just wasn't the right tradeoff here.
+
 Verify your setup before wiring up the MCP client:
 
 ```bash
